@@ -91,11 +91,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onActivityReenter(resultCode: Int, data: Intent?) {
-        super.onActivityReenter(resultCode, data)
-        finish()
-    }
-
     override fun onResume() {
         super.onResume()
         val latestPrintJob = mLatestPrintJob
