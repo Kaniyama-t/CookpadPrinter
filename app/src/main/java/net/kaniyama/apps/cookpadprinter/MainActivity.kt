@@ -6,6 +6,7 @@ import android.content.Intent
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.print.PrintAttributes
+import android.print.PrintJob
 import android.print.PrintManager
 import android.util.Log
 import android.webkit.WebResourceRequest
@@ -24,7 +25,9 @@ class MainActivity : AppCompatActivity() {
 
     private var mWebView : WebView? = null
 
-    fun onReceive(context: Context?, intent: Intent?) {
+    private var mLatestPrintJob: PrintJob? = null
+
+    private fun onReceive(context: Context?, intent: Intent?) {
         // Loading some data
         if (intent!!.action != Intent.ACTION_SEND) return
         val extras = intent.extras ?: return
@@ -82,12 +85,29 @@ class MainActivity : AppCompatActivity() {
                 jobName,
                 printAdapter,
                 printAttributes
-            )
+            ).let {
+                mLatestPrintJob = it
+            }
         }
     }
 
     override fun onActivityReenter(resultCode: Int, data: Intent?) {
         super.onActivityReenter(resultCode, data)
         finish()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val latestPrintJob = mLatestPrintJob
+        if(latestPrintJob is PrintJob &&
+            (
+                latestPrintJob.isQueued ||
+                latestPrintJob.isBlocked ||
+                latestPrintJob.isCancelled ||
+                latestPrintJob.isCompleted ||
+                latestPrintJob.isFailed ||
+                latestPrintJob.isStarted
+            )
+        ) finish();
     }
 }
