@@ -35,6 +35,7 @@ class MainActivity : AppCompatActivity() {
                 it.isNotEmpty()
             }?.forEach { url ->
                 extractRecipeId(url)?.let { recipeId ->
+                    Toast.makeText(this, CookpadURL.printURL(recipeId), Toast.LENGTH_LONG).show()
                     renderWebPage(
                         url = CookpadURL.printURL(recipeId),
                         onRendered = { createWebPrintJob(it) }
@@ -90,7 +91,7 @@ class MainActivity : AppCompatActivity() {
         val regex = "https://cookpad.com/recipe/[0-9]+"
         val src = regex.toRegex(RegexOption.IGNORE_CASE)
             .findAll(url)
-            .map { it.value }
+            .map { it.value.substring("https://cookpad.com/recipe/".length,it.value.length) }
             .toList()
         return if (src.size == 1) src[0] else null
     }
