@@ -1,0 +1,13 @@
+theme: jekyll-theme-cayman
+
+plugins:
+  - jekyll-redirect-from
+
+title:
+  Cookpad Printer
+description:
+  クックパッドアプリから直接レシピを印刷出来るようにするアプリ
+
+tryinguse_btn:
+  show_button: true
+  btn_url: https://dply.me/o5hpw9
