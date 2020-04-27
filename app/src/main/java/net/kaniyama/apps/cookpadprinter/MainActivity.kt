@@ -16,60 +16,118 @@ import android.widget.Toast
 
 class MainActivity : AppCompatActivity() {
 
+    private var mWebView: WebView? = null
+    private var mLatestPrintJob: PrintJob? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        onReceive(this, intent)
+        /* URL抽出がなかった(=takeIfでEmptyによりnull)場合はonErr#URL認識できない
+         * レシピIDが抽出できなかった(=null)場合はonErr#レシピ認識できない
+         * 抽出完了時はレンダーしてプリントジョブをポイする
+         *
+         * run loop@構文はここから
+         * https://qiita.com/sudachi808/items/9146c4263d3a5a47b4dd
+         */
+        run loop@{
+            getExtraURL().takeIf {
+                it.isNotEmpty()
+            }?.forEach { url ->
+                extractRecipeId(url)?.let { recipeId ->
+                    renderWebPage(
+                        url = CookpadURL.printURL(recipeId),
+                        onRendered = { createWebPrintJob(it) }
+                    )
+                    return@loop
+                } ?: onErr("Cookpadのレシピを認識できませんでした...")
+            } ?: onErr("URLを認識できませんでした...")
+        }
     }
 
-    private var mWebView : WebView? = null
+    override fun onResume() {
+        super.onResume()
+        // finish when printJob was generated
+        val latestPrintJob = mLatestPrintJob
+        if (latestPrintJob is PrintJob &&
+            (
+                    latestPrintJob.isQueued ||
+                            latestPrintJob.isBlocked ||
+                            latestPrintJob.isCancelled ||
+                            latestPrintJob.isCompleted ||
+                            latestPrintJob.isFailed ||
+                            latestPrintJob.isStarted
+                    )
+        ) finish()
+    }
 
-    private var mLatestPrintJob: PrintJob? = null
-
-    private fun onReceive(context: Context?, intent: Intent?) {
-        // Loading some data
-        if (intent!!.action != Intent.ACTION_SEND) return
-        val extras = intent.extras ?: return
+    /***
+     * extract URL from intent msg
+     * @return List of URL strings(almost this length is 1 when cookpad) or EmptyList
+     */
+    private fun getExtraURL(): List<String> {
+        if (intent!!.action != Intent.ACTION_SEND) return emptyList()
+        val extras = intent.extras ?: return emptyList()
         val ext = extras.getCharSequence(Intent.EXTRA_TEXT).toString()
 
-        // return when it haven't been found cookpad URL.
-        if (!ext.contains(CookpadURL.sharedURLHead)){
-            Toast.makeText(context,"cookpadのURLを認識できませんでした", Toast.LENGTH_LONG).show()
-            finish()
-        }
+        /* 正規表現について
+         * https"?"     <- "s"があってもなくても良い
+         * [\\w...]+    <- []+内の文字が存在している間切り取る
+         * \\w          <- 英数字か_
+         * []内のほか文字<- 記号等。
+         */
+        val regex = "https?://[\\w!?/+\\-_~=;.,*&@#\$%()'\\[\\]]+"
+        val urls = regex.toRegex(RegexOption.IGNORE_CASE).findAll(ext).map { it.value }
+        return urls.toList()
+    }
 
-        // cutting from intent's extra text
-        val recipeId = ext.substring(
-            ext.indexOf(CookpadURL.sharedURLHead) + CookpadURL.sharedURLHead.length ,
-            ext.length
-        )
+    /***
+     * extract cookpad's RecipeId from source URL
+     * @param url source url from intent msg
+     * @return recipeId or null
+     */
+    private fun extractRecipeId(url: String): String? {
+        val regex = "https://cookpad.com/recipe/[0-9]+"
+        val src = regex.toRegex(RegexOption.IGNORE_CASE)
+            .findAll(url)
+            .map { it.value }
+            .toList()
+        return if (src.size == 1) src[0] else null
+    }
 
-        // Create a WebView object specifically for printing
-        val webView = WebView(context)
+    /***
+     * render web page for printing
+     * @param url URL rendered
+     * @param onRendered process on rendered
+     */
+    private fun renderWebPage(url: String, onRendered: ((webView: WebView) -> Unit)) {
+        // setup renderer
+        val webView = WebView(this)
         webView.webViewClient = object : WebViewClient() {
-            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = false
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) =
+                false
+
             override fun onPageFinished(view: WebView, url: String) {
                 Log.i(ContentValues.TAG, "page finished loading $url")
-                createWebPrintJob(context!!,view)
-                mWebView = null
+                onRendered(view)
+                mWebView = null//開放
             }
         }
+        // loading
+        webView.loadUrl(url)
 
-        // Generate an HTML document on the fly:
-        webView.loadUrl(CookpadURL.printURL(recipeId))
-
-
-        // Keep a reference to WebView object until you pass the PrintDocumentAdapter
-        // to the PrintManager
         mWebView = webView
     }
 
-    private fun createWebPrintJob(context: Context, webView: WebView) {
+    /***
+     * create PrintJob from WebView
+     * @param webView rendered webView
+     */
+    private fun createWebPrintJob(webView: WebView) {
         // Get a PrintManager instance
-        (context.getSystemService(Context.PRINT_SERVICE) as? PrintManager)?.let { printManager ->
+        (getSystemService(Context.PRINT_SERVICE) as? PrintManager)?.let { printManager ->
 
-            val jobName = "${context.getString(R.string.app_name)} Document"
+            val jobName = "${getString(R.string.app_name)} Document"
 
             // Get a print adapter instance
             val printAdapter = webView.createPrintDocumentAdapter(jobName)
@@ -91,23 +149,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onActivityReenter(resultCode: Int, data: Intent?) {
-        super.onActivityReenter(resultCode, data)
+    /***
+     * Called when got an Error and want to finish application.
+     * @param msg message for User. It'll be shown user.
+     */
+    private fun onErr(msg: String) {
+        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
         finish()
-    }
-
-    override fun onResume() {
-        super.onResume()
-        val latestPrintJob = mLatestPrintJob
-        if(latestPrintJob is PrintJob &&
-            (
-                latestPrintJob.isQueued ||
-                latestPrintJob.isBlocked ||
-                latestPrintJob.isCancelled ||
-                latestPrintJob.isCompleted ||
-                latestPrintJob.isFailed ||
-                latestPrintJob.isStarted
-            )
-        ) finish();
     }
 }
