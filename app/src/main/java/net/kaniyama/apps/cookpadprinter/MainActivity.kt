@@ -27,8 +27,8 @@ class MainActivity : AppCompatActivity() {
          * レシピIDが抽出できなかった(=null)場合はonErr#レシピ認識できない
          * 抽出完了時はレンダーしてプリントジョブをポイする
          *
-         * run loop@構文はここから
-         * https://qiita.com/sudachi808/items/9146c4263d3a5a47b4dd
+         * ・run loop@構文はここから
+         * 　https://qiita.com/sudachi808/items/9146c4263d3a5a47b4dd
          */
         run loop@{
             getExtraURL().takeIf {
